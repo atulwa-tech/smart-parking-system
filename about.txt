@@ -1,33 +1,643 @@
-================================================
-  SMART PARKING SYSTEM
-================================================
+================================================================================
+                    SMART PARKING SYSTEM v1.0.0
+================================================================================
 
-A complete IoT parking management system with:
-- RFID permanent slots (1-4)
-- Web-based visitor booking (5-8)
-- Live dashboard
-- ESP32 microcontroller integration
+PROJECT OVERVIEW
+================================================================================
+A complete IoT-based parking management system combining hardware, backend, 
+and web frontend for real-time parking slot monitoring and management.
 
-PROJECT STRUCTURE:
-- server.js        : Node.js + Express backend (port 3000)
-- dashboard.html   : Web frontend (open in browser)
-- smart_parking.ino: ESP32 Arduino firmware
+COMPONENTS
+================================================================================
 
-QUICK START:
-1. Backend: npm install && node server.js
-2. Frontend: Open dashboard.html in browser
-3. ESP32: Flash smart_parking.ino to ESP32 board
+1. HARDWARE (ESP32)
+   - Microcontroller: ESP32
+   - RFID Reader: MFRC522 (SPI interface)
+   - Gate Control: 4x Servo Motors
+   - Display: 16x2 LCD with I2C backpack
+   - Connectivity: WiFi (built-in)
+   
+   Features:
+   - Real-time RFID card scanning
+   - Automatic gate control based on parking status
+   - Live LCD display showing slot availability
+   - WiFi communication with backend server
 
-DEPENDENCIES:
-- express (^5.2.1)
-- cors (^2.8.6)
-- body-parser (^2.2.2)
+2. BACKEND SERVER (Node.js)
+   - Framework: Express.js
+   - Port: 3000
+   - Database: In-memory (can be upgraded to MongoDB/PostgreSQL)
+   
+   API Endpoints:
+   - GET  /health          - Health check
+   - GET  /slots           - Fetch all parking slots + statistics
+   - POST /rfid            - Handle RFID card scans from ESP32
+   - POST /book            - Book visitor parking slots
+   - POST /release         - Release booked parking slots
 
-API ENDPOINTS:
-- GET  /api/slots           - Get all slot status
-- POST /api/assign-rfid     - Register RFID card
-- POST /api/book-visitor    - Book visitor slot
-- POST /api/release-slot    - Release parking slot
-- POST /api/emergency-stop  - Emergency stop (all slots release)
+3. FRONTEND (Flutter Web)
+   - Framework: Flutter
+   - Port: 5000
+   - Browser: Chrome/Firefox/Safari (any modern browser)
+   
+   Features:
+   - Real-time slot status display
+   - Book visitor parking slots
+   - Release parked vehicles
+   - Live occupancy statistics
+   - Dark theme UI with amber accents
 
-================================================
+PIN CONNECTIONS (ESP32)
+================================================================================
+
+RFID Module (SPI):
+  SDA/SS  → GPIO 5
+  SCK     → GPIO 18
+  MOSI    → GPIO 23
+  MISO    → GPIO 19
+  RST     → GPIO 4
+
+Servo Motors:
+  Slot 1 Gate → GPIO 13
+  Slot 2 Gate → GPIO 12
+  Slot 3 Gate → GPIO 14
+  Slot 4 Gate → GPIO 27
+
+LCD Display (I2C):
+  SDA → GPIO 21
+  SCL → GPIO 22
+  I2C Address: 0x27 (or 0x3F if needed)
+
+INSTALLATION & DEPENDENCIES
+================================================================================
+
+PREREQUISITES INSTALLATION
+────────────────────────────
+
+1. Node.js (v14 or higher)
+   Download: https://nodejs.org/
+   Windows Installer: nodejs-20.x.x-x64.msi
+   
+   Verify Installation:
+   node --version
+   npm --version
+
+2. Flutter SDK
+   Download: https://flutter.dev/docs/get-started/install
+   
+   Windows Setup:
+   - Extract to C:\flutter (or your preferred path)
+   - Add to PATH environment variable
+   - Run: flutter doctor
+   
+   Verify Installation:
+   flutter --version
+   flutter doctor
+
+3. Arduino IDE (for ESP32 programming)
+   Download: https://www.arduino.cc/en/software
+   
+   Setup ESP32:
+   - Preferences → Additional Boards Manager URLs
+   - Add: https://dl.espressif.com/dl/package_esp32_index.json
+   - Boards Manager → Search "esp32" → Install
+
+BACKEND DEPENDENCIES
+────────────────────────────
+
+Located in: backend/package.json
+
+To Install Manually:
+   cd backend
+   npm install
+
+Auto-Installed Packages:
+   - express@4.18.2              (Web framework)
+   - cors@2.8.5                  (CORS middleware)
+   - body-parser@1.20.2          (JSON parsing)
+   - uuid@9.0.0                  (Unique IDs)
+   - nodemon@3.0.1               (Dev auto-reload)
+
+To Update Dependencies:
+   npm update
+   npm outdated                  (Check for updates)
+
+To Uninstall:
+   npm uninstall [package-name]
+
+FRONTEND DEPENDENCIES
+────────────────────────────
+
+Located in: pubspec.yaml
+
+To Install Manually:
+   flutter pub get
+
+Auto-Installed Packages:
+   - flutter                     (Flutter SDK)
+   - google_fonts@6.3.3          (Typography)
+   - http@1.6.0                  (HTTP client)
+   - flutter_lints@3.0.2         (Code analysis)
+
+To Update:
+   flutter pub upgrade
+
+To Clean:
+   flutter clean
+   flutter pub get
+
+QUICK START
+================================================================================
+
+1. Run Setup (First time only):
+   .\SETUP.bat
+   
+   This will:
+   - Check Node.js installation
+   - Check Flutter installation
+   - Install backend dependencies (npm install)
+   - Install frontend dependencies (flutter pub get)
+   - Enable Flutter Web support
+
+2. Start All Components:
+   .\RUN_ALL.bat
+   
+   This will:
+   - Create 2 new windows
+   - Start backend on port 3000
+   - Start frontend on port 5000
+
+3. Access Dashboard:
+   Open browser → http://localhost:5000
+
+4. API Testing:
+   http://localhost:3000/health
+   http://localhost:3000/slots
+
+PROJECT STRUCTURE
+================================================================================
+
+smart-parking-system/
+├── backend/
+│   ├── package.json           - Node.js dependencies
+│   ├── server.js              - Express API server
+│   └── .env.example           - Environment variables template
+│
+├── main.dart                  - Flutter app entry + models + API service
+├── dashboard.dart             - Dashboard UI components
+├── pubspec.yaml               - Flutter dependencies
+│
+├── smart_parking.ino          - ESP32 Arduino code
+│
+├── RUN_ALL.bat                - Start backend + frontend together
+├── RUN_BACKEND_ONLY.bat       - Start backend only
+├── SETUP.bat                  - Initial setup wizard
+├── README.md                  - Detailed documentation
+├── about.txt                  - This file
+└── .gitignore                 - Git configuration
+
+REGISTERED RFID CARDS (DEFAULT)
+================================================================================
+
+1A2B3C4D  → Permanent (Car 1)
+5E6F7A8B  → Permanent (Car 2)
+9C0D1E2F  → Visitor (Guest 1)
+
+To add more cards:
+Edit backend/server.js → registeredCards object
+
+PARKING CONFIGURATION
+================================================================================
+
+Permanent Slots:  4 (RFID-based entry)
+Visitor Slots:    4 (Web/Dashboard booking)
+Total Capacity:   8
+
+Entry Logic:
+- RFID scan → Check if registered → Allocate free slot → Open gate
+- Second scan of same card → Toggle exit → Release slot
+
+REQUIREMENTS
+================================================================================
+
+HARDWARE:
+- ESP32 Microcontroller
+- MFRC522 RFID Reader Module
+- 4x SG90 Servo Motors
+- 16x2 LCD Display with I2C Backpack
+- Jumper wires & Breadboard
+
+SOFTWARE:
+- Node.js v14+ (Backend)
+- Flutter SDK (Frontend)
+- Arduino IDE (Hardware programming)
+- Windows/Mac/Linux OS
+
+NETWORK:
+- WiFi network for ESP32 connectivity
+- PC and ESP32 on same network
+- Port 3000 (backend) and 5000 (frontend) available
+
+MANUAL INSTALLATION STEPS
+================================================================================
+
+STEP 1: Install Node.js
+────────────────────────────
+Windows:
+  1. Download from https://nodejs.org/ (LTS version)
+  2. Run installer
+  3. Follow wizard (keep defaults)
+  4. Restart computer
+  5. Verify: Open Command Prompt
+     node --version
+     npm --version
+
+Mac:
+  brew install node
+
+Linux (Ubuntu):
+  sudo apt update
+  sudo apt install nodejs npm
+
+STEP 2: Install Flutter SDK
+────────────────────────────
+Windows:
+  1. Download Flutter SDK: https://flutter.dev/docs/get-started/install/windows
+  2. Extract to C:\flutter (avoid spaces in path)
+  3. Add to PATH:
+     - Right-click "This PC" → Properties
+     - Click "Advanced system settings"
+     - Click "Environment Variables"
+     - Click "Path" → Edit
+     - Add: C:\flutter\bin
+  4. Restart Command Prompt
+  5. Verify: flutter --version
+
+Mac:
+  1. Download from https://flutter.dev/docs/get-started/install/macos
+  2. Extract to ~/flutter
+  3. Add to PATH: echo 'export PATH="$PATH:~/flutter/bin"' >> ~/.bash_profile
+  4. Verify: flutter --version
+
+Linux:
+  1. sudo apt install git curl
+  2. git clone https://github.com/flutter/flutter.git -b stable
+  3. export PATH="$PATH:$(pwd)/flutter/bin"
+  4. flutter doctor
+
+STEP 3: Enable Flutter Web Support
+────────────────────────────────────
+  flutter config --enable-web
+  flutter channel stable
+  flutter upgrade
+
+STEP 4: Setup Arduino IDE for ESP32
+────────────────────────────────────
+Windows/Mac/Linux:
+  1. Download Arduino IDE: https://www.arduino.cc/en/software
+  2. Install and open
+  3. File → Preferences
+  4. Paste in "Additional Boards Manager URLs":
+     https://dl.espressif.com/dl/package_esp32_index.json
+  5. Tools → Board → Board Manager
+  6. Search "esp32" and install
+  7. Tools → Board → Select "ESP32 Dev Module"
+  8. Install Libraries (Sketch → Include Library → Manage Libraries):
+     - MFRC522 by GithubCommunity
+     - ESP32Servo by Kevin Harrington
+     - LiquidCrystal_I2C by Frank de Brabander
+     - ArduinoJson by Benoit Blanchon
+
+STEP 5: Clone/Setup Smart Parking Project
+────────────────────────────────────────────
+  cd c:\Projects
+  git clone [repository-url]
+  cd smart-parking-system
+  
+  OR if already downloaded:
+  cd smart-parking-system
+  SETUP.bat
+
+STEP 6: Install Backend Dependencies
+──────────────────────────────────────
+  cd backend
+  npm install
+  
+  Expected output: "added 99 packages"
+
+STEP 7: Install Frontend Dependencies
+──────────────────────────────────────
+  cd .. (back to project root)
+  flutter pub get
+  
+  Expected output: "Changed 56 dependencies"
+
+STEP 8: Start Development
+─────────────────────────
+  Option A (Automatic):
+    RUN_ALL.bat
+
+  Option B (Manual Backend):
+    cd backend
+    npm start
+    
+  Option C (Manual Frontend):
+    flutter run -d web --web-port=5000
+
+ENVIRONMENT SETUP
+================================================================================
+
+Windows Path Configuration:
+  1. Edit system environment variable PATH
+  2. Add these paths:
+     - C:\flutter\bin
+     - C:\Program Files\nodejs
+     - Your Arduino installation path
+
+Verify Environment:
+  node --version      (should show v14+)
+  npm --version       (should show 6+)
+  flutter --version   (should show stable channel)
+  dart --version      (should show 2.17+)
+
+Backend Port Configuration:
+  Default: 3000
+  To change, edit backend/server.js:
+    const PORT = process.env.PORT || 3000;
+  Or set environment variable:
+    set PORT=8080 (Windows)
+    export PORT=8080 (Mac/Linux)
+
+Frontend Port Configuration:
+  Default: 5000
+  To change when running:
+    flutter run -d web --web-port=8080
+
+DEPENDENCY MANAGEMENT
+================================================================================
+
+Adding New Backend Dependencies:
+  cd backend
+  npm install [package-name]
+  npm install --save-dev [dev-package-name]
+  
+  Examples:
+  npm install mongoose          (add MongoDB)
+  npm install dotenv             (environment variables)
+  npm install bcryptjs           (password hashing)
+
+Adding New Frontend Dependencies:
+  flutter pub add [package-name]
+  
+  Examples:
+  flutter pub add provider       (state management)
+  flutter pub add get_storage    (local storage)
+  flutter pub add dio            (HTTP client)
+
+VERIFICATION CHECKLIST
+================================================================================
+
+Before running the system, verify:
+
+□ Node.js installed    → node --version
+□ npm installed        → npm --version
+□ Flutter installed    → flutter --version
+□ Dart installed       → dart --version
+□ Flutter web enabled  → flutter config
+□ Git installed (opt)  → git --version
+□ Port 3000 free      → netstat -ano | findstr :3000
+□ Port 5000 free      → netstat -ano | findstr :5000
+□ WiFi available      → ipconfig /all
+□ Arduino IDE ready    → Check board manager
+
+TROUBLESHOOTING INSTALLATION
+================================================================================
+
+Node.js Issues:
+  Error: "node command not found"
+    → Add C:\Program Files\nodejs to PATH
+    → Restart Command Prompt/PowerShell
+    → Reboot if necessary
+
+  Error: "npm ERR! code EACCES"
+    → Run Command Prompt as Administrator
+    → Clear npm cache: npm cache clean --force
+
+Flutter Issues:
+  Error: "flutter command not found"
+    → Add C:\flutter\bin to PATH
+    → flutter doctor should show no errors
+    → Run: flutter config --android-studio-path [path]
+
+  Error: "Web device not found"
+    → Run: flutter config --enable-web
+    → Run: flutter pub get
+    → Run: flutter run -d web
+
+Dependencies Installation Failed:
+  Backend:
+    npm cache clean --force
+    cd backend
+    rm -r node_modules package-lock.json
+    npm install
+
+  Frontend:
+    flutter clean
+    flutter pub get
+
+Arduino/ESP32 Issues:
+  Board not found:
+    → Check board in Tools → Board Manager
+    → Check USB cable connection
+    → Install CH340 driver for ESP32
+
+Port Already in Use:
+  Backend (3000):
+    netstat -ano | findstr :3000
+    taskkill /PID [process_id] /F
+    
+  Frontend (5000):
+    flutter run -d web --web-port=8080
+
+
+
+CONFIGURATION
+================================================================================
+
+1. ESP32 WiFi & Server IP:
+   Edit: smart_parking.ino
+   
+   const char* WIFI_SSID     = "YOUR_SSID";
+   const char* WIFI_PASSWORD = "YOUR_PASSWORD";
+   const char* SERVER_IP     = "http://192.168.x.x:3000";
+
+   Find your PC's IP: Run 'ipconfig' in Command Prompt
+
+2. Backend Port:
+   Edit: backend/server.js
+   const PORT = process.env.PORT || 3000;
+
+3. Frontend Port:
+   Command: flutter run -d web --web-port=5000
+
+API RESPONSE EXAMPLES
+================================================================================
+
+GET /slots:
+{
+  "slots": {
+    "permanent": { "1": {...}, "2": {...} },
+    "visitor": { "1": {...}, "2": {...} }
+  },
+  "stats": {
+    "permanentFree": 3,
+    "permanentOccupied": 1,
+    "visitorFree": 4,
+    "visitorOccupied": 0,
+    "totalFree": 7
+  }
+}
+
+POST /rfid:
+{
+  "success": true,
+  "action": "entry",
+  "slot": 1,
+  "bookingId": "uuid-string"
+}
+
+POST /book:
+{
+  "success": true,
+  "bookingId": "uuid-string",
+  "slot": 1
+}
+
+TROUBLESHOOTING
+================================================================================
+
+Backend won't start:
+  → Check if port 3000 is in use: netstat -ano | findstr :3000
+  → Kill process: taskkill /PID [process_id] /F
+  → Check server.js for syntax errors
+
+ESP32 can't connect to server:
+  → Verify WiFi credentials
+  → Check server IP address (must match PC's IP)
+  → Ensure same network
+  → Check firewall settings
+
+RFID not detected:
+  → Verify pin connections
+  → Check MFRC522 library installed
+  → Try different RFID card
+
+Flutter won't run:
+  → Enable web: flutter config --enable-web
+  → Clear cache: flutter clean
+  → Get deps: flutter pub get
+
+FEATURES
+================================================================================
+
+✅ Real-time Slot Monitoring
+✅ RFID-based Entry/Exit (Permanent)
+✅ Web Booking (Visitor)
+✅ Automatic Gate Control
+✅ Live LCD Display
+✅ Statistics & Analytics
+✅ REST API
+✅ Responsive Web Dashboard
+✅ Mobile-friendly UI
+✅ Dark Theme
+
+FUTURE ENHANCEMENTS
+================================================================================
+
+□ Database Integration (MongoDB/PostgreSQL)
+□ User Authentication & Authorization
+□ Payment Integration
+□ SMS/Email Notifications
+□ Mobile App (Flutter iOS/Android)
+□ QR Code Support
+□ Multi-level Parking
+□ Analytics Dashboard
+□ Occupancy Prediction
+□ License Plate Recognition (LPR)
+
+TECHNOLOGIES USED
+================================================================================
+
+Frontend:
+  - Flutter 3.0+
+  - Dart 3.0+
+  - HTTP Client
+  - Google Fonts
+
+Backend:
+  - Node.js 14+
+  - Express.js 4.18+
+  - CORS
+  - UUID
+  - Body Parser
+
+Hardware:
+  - Arduino IDE
+  - MFRC522 Library
+  - ESP32 Servo Library
+  - LiquidCrystal_I2C Library
+  - ArduinoJson Library
+
+VERSION HISTORY
+================================================================================
+
+v1.0.0 (April 2026)
+  - Initial release
+  - Basic RFID integration
+  - Web dashboard
+  - Backend API
+  - 4 permanent + 4 visitor slots
+
+SUPPORT & DOCUMENTATION
+================================================================================
+
+Documentation Files:
+  - README.md         - Detailed setup & configuration guide
+  - about.txt         - This file
+  - Code comments     - In-code documentation
+
+API Endpoints:
+  See backend/server.js for complete endpoint documentation
+
+Getting Help:
+  1. Check README.md for common issues
+  2. Review console logs (backend & ESP32)
+  3. Check Flutter DevTools for frontend issues
+  4. Verify hardware connections
+  5. Test with curl or Postman
+
+PROJECT TIMELINE
+================================================================================
+
+Week 1: Hardware Setup & Testing
+Week 2: Arduino Programming
+Week 3: Backend Development
+Week 4: Frontend Development & Integration
+Week 5: Testing & Bug Fixes
+Week 6: Documentation & Deployment
+
+LICENSE
+================================================================================
+
+This project is open source and available under the MIT License.
+
+AUTHOR
+================================================================================
+
+Smart Parking System Development Team
+Version 1.0.0
+Released: April 2026
+
+================================================================================
+For more information, visit the project repository or README.md
+================================================================================
