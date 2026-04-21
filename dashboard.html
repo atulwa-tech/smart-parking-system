@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Parking System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow:wght@300;400;600;700;900&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Variables ─────────────────────────────────── */
+    :root {
+      --bg:        #0a0e17;
+      --surface:   #111827;
+      --border:    #1e2d40;
+      --accent:    #00d4ff;
+      --accent2:   #ff6b35;
+      --green:     #00e676;
+      --red:       #ff3d5a;
+      --yellow:    #ffd600;
+      --text:      #e0eaff;
+      --muted:     #607090;
+      --radius:    12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Barlow', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Background Grid ────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(rgba(0,212,255,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    /* ── Layout ─────────────────────────────────────── */
+    .wrapper { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 24px 60px; }
+
+    /* ── Header ─────────────────────────────────────── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 28px 0 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), #0080a0);
+      display: grid; place-items: center; font-size: 22px;
+    }
+    .brand-name { font-size: 22px; font-weight: 900; letter-spacing: -.5px; }
+    .brand-sub  { font-size: 12px; color: var(--muted); font-family: 'Space Mono', monospace; margin-top: 1px; }
+
+    .live-badge {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(0,230,118,.08); border: 1px solid rgba(0,230,118,.25);
+      border-radius: 20px; padding: 6px 14px;
+      font-size: 12px; font-family: 'Space Mono', monospace; color: var(--green);
+    }
+    .live-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--green); animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ── Stats Row ──────────────────────────────────── */
+    .stats-row {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+      margin: 28px 0;
+    }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 22px 24px;
+      position: relative; overflow: hidden;
+      transition: border-color .2s;
+    }
+    .stat-card:hover { border-color: var(--accent); }
+    .stat-card::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(0,212,255,.04), transparent 60%);
+      pointer-events: none;
+    }
+    .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 10px; }
+    .stat-val   { font-size: 48px; font-weight: 900; line-height: 1; }
+    .stat-val.green  { color: var(--green);  }
+    .stat-val.accent { color: var(--accent); }
+    .stat-val.yellow { color: var(--yellow); }
+    .stat-sub { font-size: 13px; color: var(--muted); margin-top: 6px; }
+
+    /* ── Section Title ──────────────────────────────── */
+    .section-title {
+      font-size: 13px; font-weight: 700; letter-spacing: 2px;
+      text-transform: uppercase; color: var(--muted);
+      display: flex; align-items: center; gap: 10px; margin: 32px 0 16px;
+    }
+    .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* ── Slot Grid ──────────────────────────────────── */
+    .slot-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+
+    .slot-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px; cursor: default;
+      transition: all .25s; position: relative; overflow: hidden;
+    }
+    .slot-card.available { border-color: rgba(0,230,118,.3); }
+    .slot-card.available:hover { border-color: var(--green); transform: translateY(-2px); }
+    .slot-card.occupied  { border-color: rgba(255,61,90,.3); background: rgba(255,61,90,.05); }
+
+    .slot-num {
+      font-family: 'Space Mono', monospace; font-size: 28px; font-weight: 700;
+      line-height: 1; margin-bottom: 10px;
+    }
+    .slot-card.available .slot-num { color: var(--green); }
+    .slot-card.occupied  .slot-num { color: var(--red);   }
+
+    .slot-type {
+      font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 8px;
+    }
+    .slot-badge {
+      display: inline-block; font-size: 11px; font-weight: 700;
+      padding: 3px 10px; border-radius: 6px; letter-spacing: .5px;
+    }
+    .badge-avail { background: rgba(0,230,118,.15); color: var(--green); }
+    .badge-occ   { background: rgba(255,61,90,.15);  color: var(--red);   }
+
+    .slot-uid { font-size: 10px; color: var(--muted); margin-top: 8px; font-family: 'Space Mono', monospace; word-break: break-all; }
+
+    /* ── Booking Panel ──────────────────────────────── */
+    .book-panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 28px; margin-top: 10px;
+      display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-end;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 180px; }
+    .form-group label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); }
+    .form-group input {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 14px; color: var(--text); font-family: 'Barlow', sans-serif;
+      font-size: 15px; outline: none; transition: border-color .2s;
+    }
+    .form-group input:focus { border-color: var(--accent); }
+
+    .btn {
+      padding: 11px 28px; border-radius: 8px; font-size: 14px; font-weight: 700;
+      letter-spacing: .5px; cursor: pointer; border: none; transition: all .2s;
+      font-family: 'Barlow', sans-serif;
+    }
+    .btn-primary {
+      background: var(--accent); color: #000;
+    }
+    .btn-primary:hover { background: #33ddff; transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,212,255,.35); }
+    .btn-primary:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    .btn-danger {
+      background: rgba(255,61,90,.15); color: var(--red);
+      border: 1px solid rgba(255,61,90,.3); padding: 7px 14px;
+      font-size: 12px;
+    }
+    .btn-danger:hover { background: rgba(255,61,90,.25); }
+
+    /* ── Toast ──────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 28px; right: 28px; z-index: 999;
+      padding: 14px 22px; border-radius: 10px; font-size: 14px;
+      font-weight: 600; max-width: 340px;
+      transform: translateY(80px); opacity: 0;
+      transition: all .3s cubic-bezier(.34,1.56,.64,1);
+      pointer-events: none;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+    #toast.success { background: rgba(0,230,118,.15); border: 1px solid rgba(0,230,118,.4); color: var(--green); }
+    #toast.error   { background: rgba(255,61,90,.15);  border: 1px solid rgba(255,61,90,.4);  color: var(--red);   }
+
+    /* ── Active Bookings ────────────────────────────── */
+    .booking-list { display: flex; flex-direction: column; gap: 10px; }
+    .booking-item {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 14px 18px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px;
+    }
+    .booking-info { display: flex; gap: 20px; flex-wrap: wrap; }
+    .booking-field { font-size: 13px; }
+    .booking-field span { color: var(--muted); font-size: 11px; display: block; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1px; }
+    #no-bookings { color: var(--muted); font-size: 14px; text-align: center; padding: 28px; }
+
+    /* ── Progress Bars ──────────────────────────────── */
+    .progress-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 28px; }
+    .progress-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+    .progress-header { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 13px; }
+    .progress-track { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 4px; transition: width .6s ease; }
+    .fill-perm  { background: linear-gradient(90deg, var(--accent), #0088cc); }
+    .fill-visit { background: linear-gradient(90deg, var(--accent2), #cc4400); }
+
+    /* ── Refresh ────────────────────────────────────── */
+    .refresh-row { display: flex; justify-content: flex-end; margin: 18px 0 8px; }
+    .btn-refresh {
+      background: transparent; border: 1px solid var(--border); color: var(--muted);
+      padding: 7px 16px; border-radius: 8px; font-size: 12px; cursor: pointer;
+      font-family: 'Space Mono', monospace; transition: all .2s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .btn-refresh:hover { border-color: var(--accent); color: var(--accent); }
+    .spin { animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 640px) {
+      .stats-row  { grid-template-columns: 1fr 1fr; }
+      .slot-grid  { grid-template-columns: repeat(2, 1fr); }
+      .progress-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">🅿</div>
+      <div>
+        <div class="brand-name">SmartPark</div>
+        <div class="brand-sub">PARKING MANAGEMENT SYSTEM</div>
+      </div>
+    </div>
+    <div class="live-badge"><div class="live-dot"></div> LIVE</div>
+  </header>
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Total Available</div>
+      <div class="stat-val green" id="stat-free">—</div>
+      <div class="stat-sub">out of 8 slots</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Permanent Free</div>
+      <div class="stat-val accent" id="stat-perm">—</div>
+      <div class="stat-sub">RFID slots 1–4</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Visitor Free</div>
+      <div class="stat-val yellow" id="stat-visit">—</div>
+      <div class="stat-sub">Web slots 5–8</div>
+    </div>
+  </div>
+
+  <!-- Utilisation Bars -->
+  <div class="progress-row">
+    <div class="progress-block">
+      <div class="progress-header">
+        <span>🔑 Permanent Occupancy</span>
+        <span id="perm-pct" style="color:var(--accent);font-family:'Space Mono',monospace">0%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill fill-perm" id="perm-bar" style="width:0%"></div></div>
+    </div>
+    <div class="progress-block">
+      <div class="progress-header">
+        <span>🌐 Visitor Occupancy</span>
+        <span id="visit-pct" style="color:var(--accent2);font-family:'Space Mono',monospace">0%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill fill-visit" id="visit-bar" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- Permanent Slots -->
+  <div class="section-title">🔑 Permanent Slots (RFID)</div>
+  <div class="slot-grid" id="perm-slots"></div>
+
+  <!-- Visitor Slots -->
+  <div class="section-title">🌐 Visitor Slots (Web Booking)</div>
+  <div class="slot-grid" id="visit-slots"></div>
+
+  <!-- Book a Slot -->
+  <div class="section-title">📋 Book a Visitor Slot</div>
+  <div class="book-panel">
+    <div class="form-group">
+      <label>Your Name (optional)</label>
+      <input type="text" id="guest-name" placeholder="e.g. Raj Kumar" />
+    </div>
+    <button class="btn btn-primary" id="book-btn" onclick="bookSlot()">⚡ Book Now</button>
+  </div>
+
+  <!-- Active Visitor Bookings -->
+  <div class="section-title">🧾 Active Visitor Bookings</div>
+  <div class="booking-list" id="booking-list">
+    <div id="no-bookings">No active visitor bookings</div>
+  </div>
+
+  <!-- Refresh -->
+  <div class="refresh-row">
+    <button class="btn-refresh" id="refresh-btn" onclick="fetchSlots()">
+      <span id="refresh-icon">↻</span> Refresh Status
+    </button>
+  </div>
+
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+  // ── Config ─────────────────────────────────────────
+  const API = 'http://localhost:3000'; // ← Change to your server IP
+
+  // ── Toast ──────────────────────────────────────────
+  function toast(msg, type = 'success') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className   = `show ${type}`;
+    setTimeout(() => el.classList.remove('show'), 3500);
+  }
+
+  // ── Fetch Slot Data ────────────────────────────────
+  async function fetchSlots() {
+    const icon = document.getElementById('refresh-icon');
+    icon.classList.add('spin');
+    try {
+      const res  = await fetch(`${API}/slots`);
+      const data = await res.json();
+      renderSlots(data);
+    } catch (e) {
+      toast('⚠ Cannot reach server. Check backend.', 'error');
+    } finally {
+      icon.classList.remove('spin');
+    }
+  }
+
+  // ── Render Slots ───────────────────────────────────
+  function renderSlots(data) {
+    const { slots, stats } = data;
+
+    // Stats
+    document.getElementById('stat-free').textContent  = stats.totalFree;
+    document.getElementById('stat-perm').textContent  = stats.permanentFree;
+    document.getElementById('stat-visit').textContent = stats.visitorFree;
+
+    // Progress bars
+    const permPct  = Math.round((stats.permanentOccupied  / stats.permanentTotal) * 100);
+    const visitPct = Math.round((stats.visitorOccupied    / stats.visitorTotal)   * 100);
+    document.getElementById('perm-bar').style.width   = permPct  + '%';
+    document.getElementById('visit-bar').style.width  = visitPct + '%';
+    document.getElementById('perm-pct').textContent   = permPct  + '%';
+    document.getElementById('visit-pct').textContent  = visitPct + '%';
+
+    // Permanent slots
+    const permEl = document.getElementById('perm-slots');
+    permEl.innerHTML = '';
+    for (let i = 1; i <= 4; i++) {
+      const s    = slots.permanent[i];
+      const occ  = s.status === 'occupied';
+      permEl.innerHTML += `
+        <div class="slot-card ${s.status}">
+          <div class="slot-type">Permanent · RFID</div>
+          <div class="slot-num">${String(i).padStart(2,'0')}</div>
+          <span class="slot-badge ${occ ? 'badge-occ' : 'badge-avail'}">${occ ? 'OCCUPIED' : 'FREE'}</span>
+          ${occ ? `<div class="slot-uid">UID: ${s.uid}</div>` : ''}
+        </div>`;
+    }
+
+    // Visitor slots + bookings list
+    const visitEl  = document.getElementById('visit-slots');
+    const bookList = document.getElementById('booking-list');
+    visitEl.innerHTML  = '';
+    bookList.innerHTML = '';
+    let activeBookings = 0;
+
+    for (let i = 5; i <= 8; i++) {
+      const s   = slots.visitor[i];
+      const occ = s.status === 'occupied';
+      visitEl.innerHTML += `
+        <div class="slot-card ${s.status}">
+          <div class="slot-type">Visitor · Web</div>
+          <div class="slot-num">${String(i).padStart(2,'0')}</div>
+          <span class="slot-badge ${occ ? 'badge-occ' : 'badge-avail'}">${occ ? 'OCCUPIED' : 'FREE'}</span>
+          ${occ && s.name ? `<div class="slot-uid">${s.name}</div>` : ''}
+        </div>`;
+
+      if (occ && s.bookingId) {
+        activeBookings++;
+        const t = s.bookedAt ? new Date(s.bookedAt).toLocaleTimeString() : 'N/A';
+        bookList.innerHTML += `
+          <div class="booking-item">
+            <div class="booking-info">
+              <div class="booking-field"><span>Slot</span>${i}</div>
+              <div class="booking-field"><span>Name</span>${s.name || 'Guest'}</div>
+              <div class="booking-field"><span>Booking ID</span>${s.bookingId}</div>
+              <div class="booking-field"><span>Time</span>${t}</div>
+            </div>
+            <button class="btn btn-danger" onclick="releaseSlot('${s.bookingId}')">Release</button>
+          </div>`;
+      }
+    }
+
+    if (!activeBookings) {
+      bookList.innerHTML = '<div id="no-bookings">No active visitor bookings</div>';
+    }
+
+    // Disable book btn if no visitor slots left
+    document.getElementById('book-btn').disabled = stats.visitorFree === 0;
+  }
+
+  // ── Book Visitor Slot ──────────────────────────────
+  async function bookSlot() {
+    const name = document.getElementById('guest-name').value.trim();
+    try {
+      const res  = await fetch(`${API}/book`, {
+        method  : 'POST',
+        headers : {'Content-Type':'application/json'},
+        body    : JSON.stringify({ name: name || 'Guest' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast(`✅ Slot ${data.slot} booked! ID: ${data.bookingId}`, 'success');
+        document.getElementById('guest-name').value = '';
+        fetchSlots();
+      } else {
+        toast('❌ ' + data.message, 'error');
+      }
+    } catch (e) {
+      toast('⚠ Server error. Is backend running?', 'error');
+    }
+  }
+
+  // ── Release Visitor Slot ───────────────────────────
+  async function releaseSlot(bookingId) {
+    try {
+      const res  = await fetch(`${API}/release`, {
+        method  : 'POST',
+        headers : {'Content-Type':'application/json'},
+        body    : JSON.stringify({ bookingId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast(`✅ Slot ${data.slot} released`, 'success');
+        fetchSlots();
+      } else {
+        toast('❌ ' + data.message, 'error');
+      }
+    } catch (e) {
+      toast('⚠ Server error', 'error');
+    }
+  }
+
+  // ── Auto-refresh every 10s ─────────────────────────
+  fetchSlots();
+  setInterval(fetchSlots, 10000);
+</script>
+</body>
+</html>

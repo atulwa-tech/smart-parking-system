@@ -1,0 +1,33 @@
+================================================
+  SMART PARKING SYSTEM
+================================================
+
+A complete IoT parking management system with:
+- RFID permanent slots (1-4)
+- Web-based visitor booking (5-8)
+- Live dashboard
+- ESP32 microcontroller integration
+
+PROJECT STRUCTURE:
+- server.js        : Node.js + Express backend (port 3000)
+- dashboard.html   : Web frontend (open in browser)
+- smart_parking.ino: ESP32 Arduino firmware
+
+QUICK START:
+1. Backend: npm install && node server.js
+2. Frontend: Open dashboard.html in browser
+3. ESP32: Flash smart_parking.ino to ESP32 board
+
+DEPENDENCIES:
+- express (^5.2.1)
+- cors (^2.8.6)
+- body-parser (^2.2.2)
+
+API ENDPOINTS:
+- GET  /api/slots           - Get all slot status
+- POST /api/assign-rfid     - Register RFID card
+- POST /api/book-visitor    - Book visitor slot
+- POST /api/release-slot    - Release parking slot
+- POST /api/emergency-stop  - Emergency stop (all slots release)
+
+================================================
