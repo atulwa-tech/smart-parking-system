@@ -15,6 +15,15 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(bodyParser.json());
 
+// Log all incoming requests
+app.use((req, res, next) => {
+  console.log(`[${new Date().toLocaleTimeString()}] ${req.method} ${req.path} - from ${req.ip}`);
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log(`  Body:`, JSON.stringify(req.body));
+  }
+  next();
+});
+
 // ── In-Memory Database ────────────────────────────────────
 
 // Registered RFID cards (UID -> type: 'permanent' or 'visitor')
@@ -262,9 +271,9 @@ app.get('/health', (req, res) => {
 
 // ── Start Server ──────────────────────────────────────────
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(
-    `\n=== Smart Parking Backend ===\n Server running at http://localhost:${PORT}\n`
+    `\n=== Smart Parking Backend ===\n Server running at http://0.0.0.0:${PORT}\n`
   );
   console.log('Registered RFID Cards:');
   Object.entries(registeredCards).forEach(([uid, info]) => {

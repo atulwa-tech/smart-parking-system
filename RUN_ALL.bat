@@ -40,13 +40,13 @@ echo [3/4] Starting Backend Server on http://localhost:3000...
 echo.
 start "Smart Parking Backend" cmd /k "cd backend && npm start"
 
-REM Wait a moment for backend to start
-timeout /t 2 /nobreak
+REM Wait longer for backend to start and initialize
+timeout /t 5 /nobreak
 
 REM Start Flutter web frontend in new window
 echo [4/4] Starting Flutter Web Frontend on http://localhost:5000...
 echo.
-start "Smart Parking Frontend" cmd /k "flutter run -d web --web-port=5000"
+start "Smart Parking Frontend" cmd /k "flutter run -d chrome --web-port=5000"
 
 echo.
 echo ╔════════════════════════════════════════════════════════════╗

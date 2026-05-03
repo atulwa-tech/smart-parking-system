@@ -7,13 +7,17 @@
     "start": "node server.js",
     "dev": "nodemon server.js"
   },
-  "keywords": ["parking", "rfid", "esp32"],
+  "keywords": [
+    "parking",
+    "rfid",
+    "esp32"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
     "body-parser": "^1.20.2",
+    "cors": "^2.8.6",
+    "express": "^4.18.2",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
