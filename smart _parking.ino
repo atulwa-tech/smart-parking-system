@@ -11,11 +11,11 @@
 //  Pin Connections:
 //  ─────────────────────────────────────────────────────────
 //  MFRC522 (SPI):
-//    SDA/SS  → GPIO 5
+//    SDA/SS  → GPIO 21
 //    SCK     → GPIO 18
 //    MOSI    → GPIO 23
 //    MISO    → GPIO 19
-//    RST     → GPIO 4
+//    RST     → GPIO 22
 //
 //  Servo Motor (single shared gate):
 //    Signal  → GPIO 13
@@ -23,8 +23,8 @@
 //    GND     → GND (common with ESP32)
 //
 //  LCD (I2C):
-//    SDA → GPIO 21
-//    SCL → GPIO 22
+//    SDA → GPIO 4
+//    SCL → GPIO 5
 //    VCC → 5V
 //    GND → GND
 // ============================================================
@@ -45,14 +45,14 @@ const char* WIFI_PASSWORD = "rupesh009";
 const char* SERVER_IP = "http://10.231.49.14:3000";
 
 // ── Pin Definitions ──────────────────────────────────────────
-#define RFID_SS_PIN   5
-#define RFID_RST_PIN  4
+#define RFID_SS_PIN   21
+#define RFID_RST_PIN  22
 #define SERVO_PIN     13   // Single shared gate servo
 
 // ── Objects ──────────────────────────────────────────────────
 MFRC522           rfid(RFID_SS_PIN, RFID_RST_PIN);
 Servo             gateServo;
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+LiquidCrystal_I2C lcd(0x27, 16, 2);  // Uses GPIO 4 (SDA) and GPIO 5 (SCL)
 
 // ── Gate Config ──────────────────────────────────────────────
 const int GATE_OPEN    = 90;   // degrees — adjust if your servo differs
@@ -62,12 +62,15 @@ const int GATE_HOLD_MS = 5000; // gate stays open 5 seconds
 // ── Global State ─────────────────────────────────────────────
 int  permFree  = 4;
 int  visitFree = 4;
+int  lastAssignedSlot = 0;  // Track last assigned permanent slot
+unsigned long cardDetectTime = 0;  // Track when card was last detected
+String lastCardUID = "";  // Store last card's UID for exit detection
+bool  isEntryMode = true;  // Track if we're waiting for entry or exit
 
 // ── Timing ───────────────────────────────────────────────────
 unsigned long lastFetch        = 0;
 unsigned long lastScreenUpdate = 0;
 unsigned long gateCloseTime    = 0;
-unsigned long lastRFIDDebug    = 0;  // For diagnostic output
 bool          isGateOpen       = false;
 
 // ── Forward Declarations ─────────────────────────────────────
@@ -78,8 +81,8 @@ void closeGate();
 void connectWiFi();
 void reconnectWiFi();
 void fetchSlotStatus();
-int  sendRFIDToServer(String uid);
-String getUID();
+void notifyBackendSlotOccupied(String uid);
+void notifyBackendExit(String uid);
 
 // ============================================================
 void setup() {
@@ -93,49 +96,76 @@ void setup() {
   Serial.println("\n=== SmartPark Booting ===");
 
   // ── SPI + RFID ────────────────────────────────────────────
-  SPI.begin(18, 19, 23, 5);
-  
-  // Initialize RFID with proper reset sequence
+  // SPI.begin(SCK, MOSI, MISO, SS)
+  Serial.println("\n[SPI] Initializing SPI bus...");
+  SPI.begin(18, 23, 19, 21);
+  delay(100);
+
+  // Hardware RST pin reset
+  Serial.println("[RFID] Performing hard reset on RST pin (GPIO 22)...");
   pinMode(RFID_RST_PIN, OUTPUT);
-  digitalWrite(RFID_RST_PIN, HIGH);
-  delay(50);
   digitalWrite(RFID_RST_PIN, LOW);
   delay(100);
   digitalWrite(RFID_RST_PIN, HIGH);
-  delay(200);
-  
+  delay(100);
+
+  // Initialize MFRC522
+  Serial.println("[RFID] Initializing MFRC522...");
   rfid.PCD_Init();
   delay(200);
 
-  // Boost antenna for better card detection range
-  rfid.PCD_SetAntennaGain(rfid.RxGain_max);
+  // Software reset
+  Serial.println("[RFID] Software reset...");
+  rfid.PCD_Reset();
+  delay(100);
 
-  // Verify RFID chip is responding (retry up to 3 times)
+  // Check version multiple times
   byte version = 0;
-  for (int i = 0; i < 3; i++) {
+  for (int attempt = 0; attempt < 3; attempt++) {
     version = rfid.PCD_ReadRegister(rfid.VersionReg);
-    Serial.print("RFID Firmware Check #");
-    Serial.print(i + 1);
-    Serial.print(": 0x");
+    Serial.print("[Attempt ");
+    Serial.print(attempt + 1);
+    Serial.print("] RFID Version: 0x");
     Serial.println(version, HEX);
-    if (version != 0x00 && version != 0xFF) break;
-    delay(100);
+    if (version != 0x00 && version != 0xFF) {
+      break;
+    }
+    delay(50);
   }
 
   if (version == 0x00 || version == 0xFF) {
-    Serial.println("\n❌ ERROR: RFID module not detected!");
-    Serial.println("   • Check SPI wiring: SCK=18, MOSI=23, MISO=19, SS=5");
-    Serial.println("   • Check RST pin: 4 → must be connected");
-    Serial.println("   • Check power: RFID needs 3.3V, min 100mA");
-    Serial.println("   • Try: Remove RST cap (if present), power cycle module");
+    Serial.println("\n✗✗✗ RFID NOT DETECTED ✗✗✗");
+    Serial.println("TROUBLESHOOTING:");
+    Serial.println("  1. Check SPI wiring: SCK(18), MOSI(23), MISO(19), SS(21)");
+    Serial.println("  2. Verify RST pin connected to GPIO 22");
+    Serial.println("  3. Ensure MFRC522 has 3.3V power (NOT 5V)");
+    Serial.println("  4. Try a different USB cable (power issue)");
+    Serial.println("  5. Swap MISO/MOSI if unsure");
     lcdPrint("RFID ERROR!", "Check wiring");
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 10; i++) {
       lcd.noBacklight(); delay(300);
       lcd.backlight();   delay(300);
     }
   } else {
-    Serial.print("✓ RFID OK - Firmware: 0x");
+    Serial.println("\n✓✓✓ RFID DETECTED ✓✓✓");
+    Serial.print("Firmware version: 0x");
     Serial.println(version, HEX);
+
+    // Configure antenna
+    Serial.println("[RFID] Configuring antenna gain...");
+    rfid.PCD_SetAntennaGain(rfid.RxGain_max);
+    delay(50);
+
+    // Self-test
+    Serial.println("[RFID] Running self-test...");
+    byte selfTest = rfid.PCD_PerformSelfTest();
+    if (selfTest) {
+      Serial.println("✓ RFID Self-Test PASSED");
+    } else {
+      Serial.println("✗ RFID Self-Test FAILED (may still work)");
+    }
+
+    Serial.println("✓ RFID initialization complete - Ready to scan cards");
     lcdPrint("RFID OK", "v0x" + String(version, HEX));
     delay(1000);
   }
@@ -157,8 +187,6 @@ void setup() {
 }
 
 // ============================================================
-unsigned long lastRFIDDebug = 0;  // Debug timing
-
 void loop() {
 
   // ── Auto-close gate after hold time ──────────────────────
@@ -168,59 +196,109 @@ void loop() {
     lastScreenUpdate = millis() + 1500;
   }
 
-  // ── RFID Debug output every 3 seconds ───────────────────
-  if (millis() - lastRFIDDebug > 3000) {
-    bool cardPresent = rfid.PICC_IsNewCardPresent();
-    Serial.print("RFID Status: Card Present = ");
-    Serial.print(cardPresent ? "TRUE" : "FALSE");
-    Serial.print(" | Antenna OK = ");
-    Serial.println((rfid.PCD_ReadRegister(rfid.ComIrqReg) & 0x10) ? "YES" : "NO");
-    lastRFIDDebug = millis();
-  }
-
-  // ── RFID check — never blocked ───────────────────────────
-  if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
-
-    String uid = getUID();
-    Serial.println("─────────────────────────");
-    Serial.print("Card UID: ");
-    Serial.println(uid);
-
-    lcdPrint("Card Scanned:", uid.substring(0, 16));
-    delay(300);
-
-    // If gate is already open, don't scan again
-    if (isGateOpen) {
-      lcdPrint("Gate already", "open! Wait...");
+  // ── RFID check — continuous polling ──────────────────────
+  // IMPORTANT: Must NOT use early return() here — it breaks the loop!
+  
+  if (rfid.PICC_IsNewCardPresent()) {
+    Serial.println("[RFID] Card detected! Processing...");
+    
+    // Check if this is the same card trying to exit
+    if (!isEntryMode && lastCardUID != "") {
+      Serial.println("[EXIT] Previous card detected again - releasing slot");
+      Serial.print("Releasing with UID: ");
+      Serial.println(lastCardUID);
+      
+      // Notify backend of exit
+      notifyBackendExit(lastCardUID);
+      
+      // Close gate after exit
+      lcdPrint("Exiting...", "Goodbye!");
+      delay(1500);
+      
+      // Reset state
+      isEntryMode = true;
+      lastCardUID = "";
+      lastAssignedSlot = 0;
+      
+      // Cleanup RFID state
       rfid.PICC_HaltA();
       rfid.PCD_StopCrypto1();
-      lastScreenUpdate = millis() + 2000;
-      return;
+      delay(500);
+      
+    } else if (isEntryMode) {
+      // ENTRY MODE - assign a parking slot
+      if (permFree > 0) {
+        // Calculate which permanent slot to assign (1-4)
+        lastAssignedSlot = 5 - permFree;  // If permFree=4 → slot 1, permFree=3 → slot 2, etc.
+        
+        // Generate UID based on slot number (consistent for exit detection)
+        lastCardUID = "PERM_SLOT_" + String(lastAssignedSlot);
+        
+        Serial.println("─────────────────────────");
+        Serial.print("✓ Card assigned to Permanent Slot: ");
+        Serial.println(lastAssignedSlot);
+        
+        // Notify backend of slot occupation
+        notifyBackendSlotOccupied(lastCardUID);
+        
+        // Open gate for entry
+        openGate();
+        lcdPrint("Perm Slot " + String(lastAssignedSlot), "Welcome!");
+        
+        // Update slot count
+        permFree--;
+        Serial.print("Permanent slots remaining: ");
+        Serial.println(permFree);
+        
+        // Set exit mode - wait for card to appear again
+        isEntryMode = false;
+        
+        // Wait for card to move away
+        delay(1500);
+        
+      } else {
+        // No permanent slots - try visitor slots
+        if (visitFree > 0) {
+          int visitorSlot = 5 - visitFree;
+          
+          // Generate UID based on visitor slot number
+          lastCardUID = "VISIT_SLOT_" + String(visitorSlot);
+          
+          Serial.println("─────────────────────────");
+          Serial.print("✓ Card assigned to Visitor Slot: ");
+          Serial.println(visitorSlot);
+          
+          // Notify backend of slot occupation
+          notifyBackendSlotOccupied(lastCardUID);
+          
+          // Open gate for entry
+          openGate();
+          lcdPrint("Visit Slot " + String(visitorSlot), "Welcome!");
+          
+          // Update slot count
+          visitFree--;
+          Serial.print("Visitor slots remaining: ");
+          Serial.println(visitFree);
+          
+          // Set exit mode
+          isEntryMode = false;
+          
+          // Wait for card to move away
+          delay(1500);
+        } else {
+          // All slots full
+          Serial.println("✗ Parking lot FULL - all slots occupied");
+          lcdPrint("FULL!", "Try later");
+          lastScreenUpdate = millis() + 2000;
+          delay(1000);
+        }
+      }
+      
+      // Cleanup RFID state
+      rfid.PICC_HaltA();
+      rfid.PCD_StopCrypto1();
+      delay(500);
     }
-
-    int result = sendRFIDToServer(uid);
-
-    if (result > 0) {
-      // Valid card — open the shared gate
-      openGate();
-      lcdPrint("Slot " + String(result) + " Assigned", "Welcome!");
-
-    } else if (result == -2) {
-      // Exit — open gate for departure
-      openGate();
-      lcdPrint("Goodbye!", "Gate Opening...");
-
-    } else {
-      // Unregistered or error
-      lcdPrint("Access DENIED", "Unknown Card");
-      lastScreenUpdate = millis() + 2000;
-    }
-
-    rfid.PICC_HaltA();
-    rfid.PCD_StopCrypto1();
-
-    fetchSlotStatus();
-    lastFetch = millis();
   }
 
   // ── Periodic slot refresh every 15 seconds ───────────────
@@ -241,27 +319,11 @@ void loop() {
   }
 }
 
-// ── Read RFID UID as uppercase hex string ────────────────────
-String getUID() {
-  String uid = "";
-  for (byte i = 0; i < rfid.uid.size; i++) {
-    if (rfid.uid.uidByte[i] < 0x10) uid += "0";
-    uid += String(rfid.uid.uidByte[i], HEX);
-  }
-  uid.toUpperCase();
-  return uid;
-}
-
-// ── POST /rfid → get result from server ──────────────────────
-// Returns:  1-4  → valid slot assigned (entry)
-//           -2   → exit event
-//           -1   → denied or error
-int sendRFIDToServer(String uid) {
+// ── POST /rfid → Entry: Assign slot ───────────────────────
+void notifyBackendSlotOccupied(String uid) {
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi not connected");
-    lcdPrint("No WiFi!", "Card ignored");
-    lastScreenUpdate = millis() + 1500;
-    return -1;
+    Serial.println("⚠ WiFi not connected - slot update queued locally");
+    return;
   }
 
   HTTPClient http;
@@ -270,42 +332,69 @@ int sendRFIDToServer(String uid) {
   http.addHeader("Content-Type", "application/json");
   http.setTimeout(5000);
 
-  String payload  = "{\"uid\":\"" + uid + "\"}";
-  int    httpCode = http.POST(payload);
+  // Send in backend-expected format: { uid: "..." }
+  String payload = "{\"uid\":\"" + uid + "\"}";
+  
+  Serial.print("→ ENTRY: Sending to backend ");
+  Serial.println(payload);
+  
+  int httpCode = http.POST(payload);
 
-  Serial.print("POST /rfid → HTTP ");
+  Serial.print("Backend response: HTTP ");
   Serial.println(httpCode);
 
   if (httpCode == 200) {
     String response = http.getString();
-    Serial.println("Response: " + response);
-
-    DynamicJsonDocument doc(256);
-    DeserializationError err = deserializeJson(doc, response);
-    http.end();
-
-    if (err) {
-      Serial.println("JSON parse error");
-      return -1;
-    }
-
-    bool   success = doc["success"] | false;
-    String action  = doc["action"]  | "";
-    int    slot    = doc["slot"]    | 0;
-
-    if (!success) return -1;
-    if (action == "exit") return -2;
-    return slot;
-
+    Serial.println("✓ Slot occupied: " + response);
   } else {
-    Serial.print("HTTP error: ");
+    Serial.print("⚠ Backend failed: HTTP ");
     Serial.println(httpCode);
-    lcdPrint("Server Error", "Code:" + String(httpCode));
-    lastScreenUpdate = millis() + 2000;
-    http.end();
-    return -1;
   }
+
+  http.end();
 }
+
+// ── POST /rfid → Exit: Release slot ────────────────────────
+void notifyBackendExit(String uid) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("⚠ WiFi not connected - exit queued locally");
+    return;
+  }
+
+  HTTPClient http;
+  String url = String(SERVER_IP) + "/rfid";
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(5000);
+
+  // Send same UID to trigger exit in backend
+  String payload = "{\"uid\":\"" + uid + "\"}";
+  
+  Serial.print("→ EXIT: Sending to backend ");
+  Serial.println(payload);
+  
+  int httpCode = http.POST(payload);
+
+  Serial.print("Backend response: HTTP ");
+  Serial.println(httpCode);
+
+  if (httpCode == 200) {
+    String response = http.getString();
+    Serial.println("✓ Slot released: " + response);
+    
+    // Refetch slot status to update display
+    fetchSlotStatus();
+    lastFetch = millis();
+  } else {
+    Serial.print("⚠ Backend failed: HTTP ");
+    Serial.println(httpCode);
+  }
+
+  http.end();
+}
+
+// ── GET /rfid → get result from server (DEPRECATED) ──────────
+// REMOVED - Now using direct slot assignment
 
 // ── GET /slots → refresh display counts ──────────────────────
 void fetchSlotStatus() {

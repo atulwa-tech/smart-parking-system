@@ -26,13 +26,6 @@ app.use((req, res, next) => {
 
 // ── In-Memory Database ────────────────────────────────────
 
-// Registered RFID cards (UID -> type: 'permanent' or 'visitor')
-const registeredCards = {
-  '1A2B3C4D': { type: 'permanent', name: 'Car 1' },
-  '5E6F7A8B': { type: 'permanent', name: 'Car 2' },
-  '9C0D1E2F': { type: 'visitor', name: 'Guest 1' },
-};
-
 // Parking slots: { slotId -> { type, status, uid, bookingId, name, bookedAt } }
 const slots = {
   permanent: {
@@ -103,6 +96,7 @@ app.get('/slots', (req, res) => {
 // POST /rfid — Handle RFID card scan from ESP32
 // Expects: { uid: "1A2B3C4D" }
 // Returns: { success, action, slot, bookingId }
+// ANY card will be assigned to a permanent slot first, then visitor slot
 app.post('/rfid', (req, res) => {
   const { uid } = req.body;
 
@@ -110,16 +104,11 @@ app.post('/rfid', (req, res) => {
     return res.status(400).json({ success: false, error: 'UID required' });
   }
 
-  // Check if card is registered
-  const card = registeredCards[uid.toUpperCase()];
-
-  if (!card) {
-    return res.json({ success: false, error: 'Card not registered' });
-  }
+  const upperUID = uid.toUpperCase();
 
   // Check if this UID is already parked (exit scenario)
   for (const [bookingId, session] of Object.entries(activeSessions)) {
-    if (session.uid === uid.toUpperCase()) {
+    if (session.uid === upperUID) {
       // Release the slot
       const { slotType, slotNum } = session;
       slots[slotType][slotNum].status = 'available';
@@ -139,13 +128,21 @@ app.post('/rfid', (req, res) => {
     }
   }
 
-  // Find available slot for this card type
-  const availableSlot = findAvailableSlot(card.type);
+  // Try to assign to permanent slot first (any card)
+  let availableSlot = findAvailableSlot('permanent');
+  let slotType = 'permanent';
 
+  // If no permanent slots, try visitor slots
+  if (!availableSlot) {
+    availableSlot = findAvailableSlot('visitor');
+    slotType = 'visitor';
+  }
+
+  // If no slots available at all
   if (!availableSlot) {
     return res.json({
       success: false,
-      error: `No ${card.type} slots available`,
+      error: 'No slots available',
     });
   }
 
@@ -153,23 +150,23 @@ app.post('/rfid', (req, res) => {
   const bookingId = uuidv4();
   const now = new Date().toISOString();
 
-  slots[card.type][availableSlot] = {
+  slots[slotType][availableSlot] = {
     status: 'occupied',
-    uid: uid.toUpperCase(),
+    uid: upperUID,
     bookingId,
-    name: card.name,
+    name: `Car (${upperUID.substring(0, 8)})`,
     bookedAt: now,
   };
 
   activeSessions[bookingId] = {
-    uid: uid.toUpperCase(),
-    slotType: card.type,
+    uid: upperUID,
+    slotType: slotType,
     slotNum: availableSlot,
     timestamp: now,
   };
 
   console.log(
-    `[ENTRY] UID ${uid} booked ${card.type} slot ${availableSlot}, BookingID: ${bookingId}`
+    `[ENTRY] UID ${uid} booked ${slotType} slot ${availableSlot}, BookingID: ${bookingId}`
   );
 
   res.json({
@@ -275,9 +272,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(
     `\n=== Smart Parking Backend ===\n Server running at http://0.0.0.0:${PORT}\n`
   );
-  console.log('Registered RFID Cards:');
-  Object.entries(registeredCards).forEach(([uid, info]) => {
-    console.log(`  ${uid} → ${info.type} (${info.name})`);
-  });
-  console.log('\n');
+  console.log('✓ System ready - any RFID card will be accepted\n');
 });
