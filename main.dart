@@ -151,6 +151,20 @@ class ApiService {
     }
     return null;
   }
+
+  static Future<Map<String, dynamic>?> releasePermanentSlot(String uid) async {
+    try {
+      final res = await http.post(
+        Uri.parse('$_base/release-permanent'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'uid': uid}),
+      );
+      return jsonDecode(res.body);
+    } catch (e) {
+      debugPrint('releasePermanentSlot error: $e');
+    }
+    return null;
+  }
 }
 
 // ── App Entry ─────────────────────────────────────────────────

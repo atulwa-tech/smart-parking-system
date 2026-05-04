@@ -92,6 +92,17 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
+  Future<void> _releasePermanent(String uid) async {
+    final res = await ApiService.releasePermanentSlot(uid);
+    if (!mounted) return;
+    if (res != null && res['success'] == true) {
+      _toast('✅ Permanent Slot ${res['slot']} released', true);
+      _fetch();
+    } else {
+      _toast('❌ ${res?['message'] ?? 'Release failed'}', false);
+    }
+  }
+
   void _toast(String msg, bool ok) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -177,6 +188,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     _SlotGrid(
                       slots: _data!.permanent,
                       isPermanent: true,
+                      onRelease: _releasePermanent,
                     ),
                     const SizedBox(height: 36),
 
@@ -186,6 +198,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     _SlotGrid(
                       slots: _data!.visitor,
                       isPermanent: false,
+                      onRelease: _release,
                     ),
                     const SizedBox(height: 36),
 
@@ -547,7 +560,12 @@ class _SectionLabel extends StatelessWidget {
 class _SlotGrid extends StatelessWidget {
   final Map<int, SlotInfo> slots;
   final bool isPermanent;
-  const _SlotGrid({required this.slots, required this.isPermanent});
+  final Function(String) onRelease;  // ← Release callback
+  const _SlotGrid({
+    required this.slots,
+    required this.isPermanent,
+    required this.onRelease,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -568,6 +586,7 @@ class _SlotGrid extends StatelessWidget {
           slotNum: entries[i].key,
           info: entries[i].value,
           isPermanent: isPermanent,
+          onRelease: onRelease,
         ),
       );
     });
@@ -578,7 +597,13 @@ class _SlotCard extends StatefulWidget {
   final int slotNum;
   final SlotInfo info;
   final bool isPermanent;
-  const _SlotCard({required this.slotNum, required this.info, required this.isPermanent});
+  final Function(String) onRelease;  // ← Release callback
+  const _SlotCard({
+    required this.slotNum,
+    required this.info,
+    required this.isPermanent,
+    required this.onRelease,
+  });
 
   @override
   State<_SlotCard> createState() => _SlotCardState();
@@ -632,6 +657,41 @@ class _SlotCardState extends State<_SlotCard> {
                 style: GoogleFonts.spaceMono(fontSize: 9, color: AppColors.muted),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 28,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () {
+                      final releaseId = widget.isPermanent
+                          ? (widget.info.uid ?? '')
+                          : (widget.info.bookingId ?? '');
+                      if (releaseId.isNotEmpty) {
+                        widget.onRelease(releaseId);
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.red.withValues(alpha: .2),
+                        border: Border.all(color: AppColors.red, width: .8),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Release',
+                        style: GoogleFonts.spaceMono(
+                          fontSize: 8,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.red,
+                          letterSpacing: .5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ],
           ],

@@ -45,6 +45,14 @@ const slots = {
 // Track active sessions: { bookingId -> { uid, slotType, slotNum, timestamp } }
 const activeSessions = {};
 
+// ── Gate Control (for ESP32) ──────────────────────────────
+let gateCommand = {
+  open: false,
+  reason: '',
+  timestamp: null,
+  sentCount: 0,  // Track how many times gate signal was sent
+};
+
 // ── Utility Functions ──────────────────────────────────────
 
 function getStats() {
@@ -91,6 +99,32 @@ app.get('/slots', (req, res) => {
     slots,
     stats: getStats(),
   });
+});
+
+// GET /gate — ESP32 polls this to check if gate should open
+app.get('/gate', (req, res) => {
+  const response = {
+    open: gateCommand.open,
+    reason: gateCommand.reason,
+  };
+
+  // Send gate signal 3 times to ensure ESP32 catches it
+  if (gateCommand.open) {
+    gateCommand.sentCount++;
+    console.log(`[GATE] Signal sent (${gateCommand.sentCount}/3): ${gateCommand.reason}`);
+    
+    // Reset after 3 sends (approximately 6 seconds = 3 polls × 2 seconds)
+    if (gateCommand.sentCount >= 3) {
+      gateCommand = {
+        open: false,
+        reason: '',
+        timestamp: null,
+        sentCount: 0,
+      };
+    }
+  }
+
+  res.json(response);
 });
 
 // POST /rfid — Handle RFID card scan from ESP32
@@ -210,6 +244,14 @@ app.post('/book', (req, res) => {
     timestamp: now,
   };
 
+  // ✓ TRIGGER GATE OPENING FOR VISITOR SLOT BOOKING
+  gateCommand = {
+    open: true,
+    reason: `Visitor slot ${availableSlot} booked by ${name || 'Guest'}`,
+    timestamp: now,
+    sentCount: 0,
+  };
+
   console.log(
     `[DASHBOARD BOOK] ${name || 'Guest'} booked visitor slot ${availableSlot}, BookingID: ${bookingId}`
   );
@@ -221,7 +263,7 @@ app.post('/book', (req, res) => {
   });
 });
 
-// POST /release — Release a slot from dashboard
+// POST /release — Release visitor slot from dashboard
 // Expects: { bookingId: "uuid" }
 // Returns: { success, slot }
 app.post('/release', (req, res) => {
@@ -255,6 +297,53 @@ app.post('/release', (req, res) => {
   res.json({
     success: true,
     slot: slotNum,
+  });
+});
+
+// POST /release-permanent — Release a permanent slot from dashboard
+// Expects: { uid: "PERM_SLOT_1" }
+// Returns: { success, slot }
+app.post('/release-permanent', (req, res) => {
+  const { uid } = req.body;
+
+  if (!uid) {
+    return res.json({
+      success: false,
+      error: 'UID not provided',
+    });
+  }
+
+  // Find permanent slot with matching UID
+  let slotNum = null;
+  for (const [num, slotData] of Object.entries(slots.permanent)) {
+    if (slotData.uid === uid) {
+      slotNum = num;
+      break;
+    }
+  }
+
+  if (slotNum === null) {
+    return res.json({
+      success: false,
+      error: 'Permanent slot not found',
+    });
+  }
+
+  slots.permanent[slotNum] = {
+    status: 'available',
+    uid: null,
+    bookingId: null,
+    name: null,
+    bookedAt: null,
+  };
+
+  console.log(
+    `[DASHBOARD RELEASE] Permanent slot ${slotNum} released, UID: ${uid}`
+  );
+
+  res.json({
+    success: true,
+    slot: parseInt(slotNum),
   });
 });
 
